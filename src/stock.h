@@ -157,6 +157,10 @@ class Account {
     void add_money(double x);
     void add_share(int stock_id, int num);
     int get_share(int stock_id);
+    int get_net_share(int stock_id);
+    #ifdef DEBUG
+    friend class Market;
+    #endif // DEBUG
 };
 
 class Transaction {
@@ -360,6 +364,8 @@ class Market  // Please DO NOT change the interface here
     bool check_ciruit_breaker();
 
     bool check_usr_money_not_negative();
+
+    bool check_usr_does_not_sell_more_than_he_have();
 #endif  // DEBUG
 };
 #endif

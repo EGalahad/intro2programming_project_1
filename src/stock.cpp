@@ -78,7 +78,8 @@ void Stock::del_sell_order(shared_ptr<Order> sellorder, int log_id) {
 OrderResult Stock::buy(shared_ptr<Account> usr, int num_share, double price) {
 #ifdef DEBUG
     cout << "[stock.buy]: usr " << usr->get_id() << " want to buy stock " << stock_id << endl;
-    cout << "\tusr fluid: " << usr->get_fluid() << " price: " << price << " num_share: " << num_share << " stock price: " << get_price() << " freezed: " << freeze << endl;
+    cout << "\tusr fluid: " << usr->get_fluid() << " price: " << price << " num_share: "
+         << num_share << " stock price: " << get_price() << " freezed: " << freeze << endl;
 #endif  // DEBUG
     shared_ptr<Order> result_buy_order = nullptr;
     if (usr->get_fluid() < price * num_share || freeze) {
@@ -150,10 +151,11 @@ OrderResult Stock::buy(shared_ptr<Account> usr, int num_share, double price) {
 OrderResult Stock::sell(shared_ptr<Account> usr, int num_share, double price) {
 #ifdef DEBUG
     cout << "[stock.sell]: usr " << usr->get_id() << " want to sell stock " << stock_id << endl;
-    cout << "\tusr share: " << usr->get_share(stock_id) << " num_share: " << num_share << " freezed: " << freeze << endl;
+    cout << "\tusr net share: " << usr->get_net_share(stock_id)
+         << " num_share: " << num_share << " freezed: " << freeze << endl;
 #endif  // DEBUG
     shared_ptr<Order> result_sell_order = nullptr;
-    if (usr->get_share(stock_id) < num_share || freeze) {
+    if (usr->get_net_share(stock_id) < num_share || freeze) {
         cout << "\tnot enough shares to sell or stock is freezed" << endl;
         return make_pair(-1, result_sell_order);
     }
@@ -223,7 +225,7 @@ bool Stock::check_freeze() {
     if (cr_price > 1.1 * st_price || cr_price < 0.9 * st_price) {
         auto logger_strong = logger.lock();
         auto txn = make_shared<FreezeTransaction>(shared_from_this(), logger_strong->get_id());
-        logger_strong->push_back(txn);
+        logger_strong->push_back(static_pointer_cast<Transaction>(txn));
         freeze = 1;
         cout << "\tis now freezed" << endl;
     }
@@ -245,6 +247,15 @@ int Account::get_share(int stock_id) {
     if (it == holds.end())
         return 0;
     return it->second;
+}
+int Account::get_net_share(int stock_id) {
+    int total = get_share(stock_id);
+    for (auto order : orders) {
+        if (order->get_stock()->get_id() == stock_id && order->order_type == Order::SELL) {
+            total -= order->get_shares();
+        }
+    }
+    return total;
 }
 double Account::get_remain() { return remain; }
 double Account::get_fluid() {
@@ -365,7 +376,7 @@ bool Market::add_order(int usr_id, int stock_id, int num_share, double price, bo
         accounts[usr_id]->add_order(buy_order);
         return true;
     } else {
-        if (usr->get_share(stock_id) < num_share) return false;
+        if (usr->get_net_share(stock_id) < num_share) return false;
         auto sell_order = make_shared<Order>(make_pair(stocks[stock_id], num_share), accounts[usr_id], price, Order::SELL);
         stocks[stock_id]->add_sell_order(sell_order);
         accounts[usr_id]->add_order(sell_order);
@@ -435,6 +446,7 @@ bool Market::check() {
     res |= check_buy_order_smaller_than_sell_order();
     res |= check_ciruit_breaker();
     res |= check_usr_money_not_negative();
+    res |= check_usr_does_not_sell_more_than_he_have();
     if (res) exit(0);
     return res;
 }
@@ -475,6 +487,29 @@ bool Market::check_usr_money_not_negative() {
         if (account.second->get_remain() < 0) {
             cout << "check_usr_money_not_negative]: usr_id: " << account.first << endl;
             return 1;
+        }
+    }
+    return 0;
+}
+
+bool Market::check_usr_does_not_sell_more_than_he_have() {
+    for (auto account : accounts) {
+        unordered_map<int, int> selling;
+        for (auto order : account.second->orders) {
+            if (order->order_type == Order::SELL)
+                selling[order->get_stock()->get_id()] += order->get_shares();
+        }
+        for (auto hold : selling) {
+            auto iter = account.second->holds.find(hold.first);
+            if (iter == account.second->holds.end()) {
+                cout << "[market.check]: selling never owned stock, usr id: " << account.second->get_id() << endl;
+                return 1;
+            }
+            if (iter->second < hold.second) {
+                cout << "[market.check]: selling more than owned, usr id: " << account.second->get_id() << endl;
+                cout << "\towned: " << hold.second << " sold: " << iter->second << endl;
+                return 1;
+            }
         }
     }
     return 0;

@@ -58,7 +58,7 @@ void test() {
     */
 }
 
-void init_market(shared_ptr<Market> market, vector<int> &stock_list, vector<int> &user_list, int n_usr = 30, int n_stk = 100) {
+void init_market(shared_ptr<Market> market, vector<int> &stock_list, vector<int> &user_list, int n_usr = 50, int n_stk = 60) {
     user_list.push_back(0);
     for (int i = 1; i <= n_usr; i++) {
         user_list.push_back(i);
@@ -135,7 +135,8 @@ void test_add_sell_order_then_buy() {
 void test_illegal() {
     auto market = make_shared<Market>();
     vector<int> stock_list, user_list;
-    init_market(market, stock_list, user_list);
+    int n_usr = 40, n_stk = 60;
+    init_market(market, stock_list, user_list, n_usr, n_stk);
     market->new_day();
     int target_stock_id = 50, target_num_share = 50 * 10 - 1;
     int party_a = 8, party_b = 9;
@@ -152,7 +153,7 @@ void test_illegal() {
     }
     vector<int> hold_list(1, 0);
     for (int i = 1; i < user_list.size(); i++) {
-        int stock_id = 100l * rand() / RAND_MAX;
+        int stock_id = (long long)(n_stk - 1) * rand() / RAND_MAX + 1;
         hold_list.push_back(stock_id);
         market->usr_buy(i, stock_id, i * 5, stock_id);
         market->check();
@@ -166,7 +167,7 @@ void test_illegal() {
     }
     market->new_day();
     for (int i = 1; i < user_list.size(); i++) {
-        int stock_id = 100l * rand() / RAND_MAX;
+        int stock_id = (long long)(n_stk - 1) * rand() / RAND_MAX + 1;
         double price = stock_id * (1 + (double)rand() / RAND_MAX * 0.2);
         market->usr_buy(i, stock_id, i * 5, price);
         market->check();
