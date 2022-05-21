@@ -178,15 +178,16 @@ void test_illegal() {
 void test_undo() {
     auto market = make_shared<Market>();
     vector<int> stock_list, user_list;
-    int n_usr = 40, n_stk = 60;
+    int n_usr = 4000, n_stk = 6000;
     init_market(market, stock_list, user_list, n_usr, n_stk);
     market->new_day();
+    int cnt = 0;
     for (int i = 1; i < user_list.size(); i++) {
-        market->usr_buy(i, i, n_usr * i, i);
+        if (market->usr_buy(i, i, 0.9 * n_usr * i, i) != -1) cnt++;
         market->check();
     }
-    for (int i = 1; i < user_list.size(); i++) {
-        if (rand() < 0.7 * RAND_MAX) market->undo();
+    for (int i = 1; i < cnt; i++) {
+        if (rand() < 0.9 * RAND_MAX) market->undo();
         market->check();
     }
     market->new_day();
@@ -194,12 +195,12 @@ void test_undo() {
     for (int i = 1; i < user_list.size(); i++) {
         int stock_id = (long long)(n_stk - 1) * rand() / RAND_MAX + 1;
         hold_list.push_back(stock_id);
-        market->usr_buy(i, stock_id, i * 5, stock_id);
+        market->usr_buy(i, stock_id, 0.7 * n_usr * i, stock_id);
         market->check();
     }
     market->new_day();
     for (int i = 1; i < user_list.size(); i++) {
-        market->usr_sell(i, hold_list[i], 4 * i, (double)hold_list[i] * 1.03);
+        market->usr_sell(i, hold_list[i], 4 * i, (double)hold_list[i] * 1.05);
         market->check();
         if (rand() > RAND_MAX / 2) market->undo();
         market->check();
