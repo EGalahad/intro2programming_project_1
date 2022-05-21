@@ -1,4 +1,7 @@
-bin/*
+bin
+me
+.vscode
+main
 
 # Prerequisites
 *.d
