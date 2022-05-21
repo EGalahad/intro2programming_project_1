@@ -47,16 +47,16 @@ typedef set<pair<double, shared_ptr<Order>>>::iterator iter;
 void Stock::add_buy_order(shared_ptr<Order> buyorder, int log_id) {
     buy_orders.insert(make_pair(-buyorder->get_price(), buyorder));
     if (log_id == -2) return;
-    if (log_id == -1) check_freeze();
     auto logger_strong = logger.lock();
+    if (log_id == -1) check_freeze(logger_strong->get_id());
     auto txn = make_shared<AddOrderTransaction>(buyorder, (log_id == -1) ? logger_strong->get_id() : log_id);
     logger_strong->push_back(static_pointer_cast<Transaction>(txn));
 }
 void Stock::add_sell_order(shared_ptr<Order> sellorder, int log_id) {
     sell_orders.insert(make_pair(sellorder->get_price(), sellorder));
     if (log_id == -2) return;
-    if (log_id == -1) check_freeze();
     auto logger_strong = logger.lock();
+    if (log_id == -1) check_freeze(logger_strong->get_id());
     auto txn = make_shared<AddOrderTransaction>(sellorder, (log_id == -1) ? logger_strong->get_id() : log_id);
     logger_strong->push_back(static_pointer_cast<Transaction>(txn));
 }
@@ -144,7 +144,7 @@ OrderResult Stock::buy(shared_ptr<Account> usr, int num_share, double price) {
         cout << endl;
 #endif  // DEBUG
     }
-    check_freeze();
+    check_freeze(buy_log_id);
     return make_pair(num_bought, result_buy_order);
 }
 
@@ -212,21 +212,22 @@ OrderResult Stock::sell(shared_ptr<Account> usr, int num_share, double price) {
         cout << endl;
 #endif  // DEBUG
     }
-    check_freeze();
+    check_freeze(sell_log_id);
     return make_pair(num_sold, result_sell_order);
 }
 void Stock::init_start_price() {
     st_price = (sell_orders.empty()) ? 0 : sell_orders.begin()->first;
 }
-bool Stock::check_freeze() {
+bool Stock::check_freeze(int log_id) {
     if (freeze) return 1;
     if (st_price == 0) return 0;
     double cr_price = (sell_orders.empty()) ? 0 : sell_orders.begin()->first;
     if (cr_price > 1.1 * st_price || cr_price < 0.9 * st_price) {
-        auto logger_strong = logger.lock();
-        auto txn = make_shared<FreezeTransaction>(shared_from_this(), logger_strong->get_id());
-        logger_strong->push_back(static_pointer_cast<Transaction>(txn));
         freeze = 1;
+        if (log_id == -1) return 1;
+        auto logger_strong = logger.lock();
+        auto txn = make_shared<FreezeTransaction>(shared_from_this(), log_id);
+        logger_strong->push_back(static_pointer_cast<Transaction>(txn));
         cout << "\tis now freezed" << endl;
     }
     return freeze;
@@ -286,6 +287,9 @@ BuyAndSellTransaction::BuyAndSellTransaction(shared_ptr<Account> _buyer, shared_
     this->txn_type = Transaction::BUY_AND_SELL;
 }
 void BuyAndSellTransaction::undo() {
+#ifdef DEBUG
+    cout << "\tundo buy and sell" << endl;
+#endif  // DEBUG
     double price = order->get_price();
     auto buyer_strong = buyer.lock();
     auto seller_strong = buyer.lock();
@@ -301,6 +305,9 @@ AddOrderTransaction::AddOrderTransaction(shared_ptr<Order> _order, int _id) : Tr
     this->txn_type = Transaction::ADD_ORDER;
 }
 void AddOrderTransaction::undo() {
+#ifdef DEBUG
+    cout << "\tundo add order" << endl;
+#endif  // DEBUG
     auto usr = order->get_usr();
     auto stock = order->get_stock();
     if (order->order_type == Order::BUY) stock->del_buy_order(order, -2);
@@ -309,6 +316,9 @@ void AddOrderTransaction::undo() {
 }
 
 DelOrderTransaction::DelOrderTransaction(shared_ptr<Order> _order, int _id) : Transaction(_id) {
+#ifdef DEBUG
+    cout << "\tundo del order" << endl;
+#endif  // DEBUG
     this->order = _order;
     this->txn_type = Transaction::DEL_ORDER;
 }
@@ -324,6 +334,9 @@ FreezeTransaction::FreezeTransaction(shared_ptr<Stock> _stock, int _id) : Transa
     this->txn_type = Transaction::FREEZE;
 }
 void FreezeTransaction::undo() {
+#ifdef DEBUG
+    cout << "\tundo freeze" << endl;
+#endif  // DEBUG
     auto stock_strong = stock.lock();
     stock_strong->reset_freeze();
 }
@@ -472,13 +485,17 @@ bool Market::check_buy_order_smaller_than_sell_order() {
 }
 
 bool Market::check_ciruit_breaker() {
+    cout << "[check_ciruit_breaker]: " << endl;
     for (auto stock : stocks) {
-        if (!stock.second->is_freeze() && stock.second->check_freeze()) {
-            cout << "[check_circuit_breaker]: stock_id" << stock.second->get_id();
-            cout << "st_price: " << stock.second->st_price << " cr_price: " << stock.second->get_price() << endl;
+        if (!stock.second->is_freeze() && stock.second->check_freeze(-1)) {
+            cout << "\tERROR" << endl;
+            cout << "\tstock_id" << stock.second->get_id()
+                 << "st_price: " << stock.second->st_price
+                 << " cr_price: " << stock.second->get_price() << endl;
             return 1;
         }
     }
+    cout << "\tPASS" << endl;
     return 0;
 }
 

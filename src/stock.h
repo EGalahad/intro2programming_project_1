@@ -135,7 +135,7 @@ class Stock : public enable_shared_from_this<Stock> {
      * @brief   check condition and return whether freeze, may create a FreezeTransaction log
      *
      */
-    bool check_freeze();
+    bool check_freeze(int log_id);
     void reset_freeze();
 };
 
