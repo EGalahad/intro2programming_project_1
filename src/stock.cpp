@@ -356,6 +356,17 @@ Market::Market() {
     market_account = make_shared<Account>(0, 0);
 }
 
+Market::~Market() {
+    // logger.reset();
+    // market_account.reset();
+    // for (auto account : accounts) {
+    //     account.second.reset();
+    // }
+    // for (auto stock : stocks) {
+    //     stock.second.reset();
+    // }
+}
+
 void Market::new_day() {
 #ifdef DEBUG
     cout << "[Market.new_day]: new day!" << endl;

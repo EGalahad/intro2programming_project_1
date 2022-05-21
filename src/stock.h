@@ -268,6 +268,12 @@ class Market  // Please DO NOT change the interface here
     Market();
 
     /**
+     * @brief Destruct all the objects its shared_ptr points to
+     * 
+     */
+    ~Market();
+
+    /**
      * @brief Begin a new day
      *
      */
