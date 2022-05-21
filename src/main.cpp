@@ -139,7 +139,7 @@ void test_illegal() {
     market->new_day();
     int target_stock_id = 50, target_num_share = 50 * 10 - 1;
     int party_a = 8, party_b = 9;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 7; i++) {
         static const double factor = 1.02;
         static double price = target_stock_id;
         market->usr_buy(party_a, target_stock_id, target_num_share, price);
@@ -148,23 +148,28 @@ void test_illegal() {
         market->usr_buy(party_b, target_stock_id, target_num_share, price);
         price *= factor;
         market->usr_sell(party_b, target_stock_id, target_num_share, price);
+        market->check();
     }
     vector<int> hold_list(1, 0);
     for (int i = 1; i < user_list.size(); i++) {
         int stock_id = 100l * rand() / RAND_MAX;
         hold_list.push_back(stock_id);
         market->usr_buy(i, stock_id, i * 5, stock_id);
+        market->check();
     }
     market->new_day();
     for (int i = 1; i < user_list.size(); i++) {
         market->usr_sell(i, hold_list[i], 4 * i, (double)hold_list[i] * 1.03);
-        if (rand() * 2 > RAND_MAX) market->undo();
+        market->check();
+        if (rand() > RAND_MAX / 2) market->undo();
+        market->check();
     }
     market->new_day();
     for (int i = 1; i < user_list.size(); i++) {
         int stock_id = 100l * rand() / RAND_MAX;
         double price = stock_id * (1 + (double)rand() / RAND_MAX * 0.2);
         market->usr_buy(i, stock_id, i * 5, price);
+        market->check();
     }
     market->new_day();
 }

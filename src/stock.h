@@ -60,7 +60,7 @@ typedef pair<int, shared_ptr<Order>> OrderResult;
 
 class Stock : public enable_shared_from_this<Stock> {
     set<pair<double, shared_ptr<Order>>> buy_orders, sell_orders;
-    shared_ptr<Logs> logger;
+    weak_ptr<Logs> logger;
     bool freeze;
     int stock_id;
     double st_price;
@@ -177,16 +177,17 @@ class Transaction {
 
 class BuyAndSellTransaction : public Transaction {
    public:
-    shared_ptr<Account> buyer, seller;
+    weak_ptr<Account> buyer, seller;
     int num_share;
     shared_ptr<Order> order;
     BuyAndSellTransaction(shared_ptr<Account> _buyer, shared_ptr<Account> _seller, int _num, shared_ptr<Order> order, int _id);
     void undo() override;
     void log() override {
+        auto buyer_strong = buyer.lock();
+        auto seller_strong = buyer.lock();
         cout << "[logging] type: buy and sell" << endl
-             << "buyer id:"
-             << buyer->get_id()
-             << " seller id: " << seller->get_id()
+             << "buyer id:" << buyer_strong->get_id()
+             << " seller id: " << seller_strong->get_id()
              << " num_share: " << num_share
              << " stock_id: " << order->get_stock()->get_id()
              << endl;
@@ -219,12 +220,13 @@ class DelOrderTransaction : public Transaction {
 
 class FreezeTransaction : public Transaction {
    public:
-    shared_ptr<Stock> stock;
+    weak_ptr<Stock> stock;
     FreezeTransaction(shared_ptr<Stock> _stock, int _id);
     void undo() override;
     void log() override {
+        auto stock_strong = stock.lock();
         cout << "[logging] type: freeze" << endl
-             << " stock_id: " << stock->get_id()
+             << " stock_id: " << stock_strong->get_id()
              << endl;
     }
 };

@@ -2,6 +2,7 @@ bin
 me
 .vscode
 main
+out.txt
 
 # Prerequisites
 *.d

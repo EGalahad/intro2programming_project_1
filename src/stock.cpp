@@ -48,38 +48,42 @@ void Stock::add_buy_order(shared_ptr<Order> buyorder, int log_id) {
     buy_orders.insert(make_pair(-buyorder->get_price(), buyorder));
     if (log_id == -2) return;
     if (log_id == -1) check_freeze();
-    auto txn = make_shared<AddOrderTransaction>(buyorder, (log_id == -1) ? logger->get_id() : log_id);
-    logger->push_back(static_pointer_cast<Transaction>(txn));
+    auto logger_strong = logger.lock();
+    auto txn = make_shared<AddOrderTransaction>(buyorder, (log_id == -1) ? logger_strong->get_id() : log_id);
+    logger_strong->push_back(static_pointer_cast<Transaction>(txn));
 }
 void Stock::add_sell_order(shared_ptr<Order> sellorder, int log_id) {
     sell_orders.insert(make_pair(sellorder->get_price(), sellorder));
     if (log_id == -2) return;
     if (log_id == -1) check_freeze();
-    auto txn = make_shared<AddOrderTransaction>(sellorder, (log_id == -1) ? logger->get_id() : log_id);
-    logger->push_back(static_pointer_cast<Transaction>(txn));
+    auto logger_strong = logger.lock();
+    auto txn = make_shared<AddOrderTransaction>(sellorder, (log_id == -1) ? logger_strong->get_id() : log_id);
+    logger_strong->push_back(static_pointer_cast<Transaction>(txn));
 }
 void Stock::del_buy_order(shared_ptr<Order> buyorder, int log_id) {
     buy_orders.erase(buy_orders.find(make_pair(-buyorder->get_price(), buyorder)));
     if (log_id == -2) return;
-    auto txn = make_shared<DelOrderTransaction>(buyorder, logger->get_id());
-    logger->push_back(static_pointer_cast<Transaction>(txn));
+    auto logger_strong = logger.lock();
+    auto txn = make_shared<DelOrderTransaction>(buyorder, logger_strong->get_id());
+    logger_strong->push_back(static_pointer_cast<Transaction>(txn));
 }
 void Stock::del_sell_order(shared_ptr<Order> sellorder, int log_id) {
     sell_orders.erase(sell_orders.find(make_pair(sellorder->get_price(), sellorder)));
     if (log_id == -2) return;
-    auto txn = make_shared<DelOrderTransaction>(sellorder, logger->get_id());
-    logger->push_back(static_pointer_cast<Transaction>(txn));
+    auto logger_strong = logger.lock();
+    auto txn = make_shared<DelOrderTransaction>(sellorder, logger_strong->get_id());
+    logger_strong->push_back(static_pointer_cast<Transaction>(txn));
 }
 
 OrderResult Stock::buy(shared_ptr<Account> usr, int num_share, double price) {
 #ifdef DEBUG
     cout << "[stock.buy]: usr " << usr->get_id() << " want to buy stock " << stock_id << endl;
+    cout << "\tusr fluid: " << usr->get_fluid() << " price: " << price << " num_share: " << num_share << " stock price: " << get_price() << " freezed: " << freeze << endl;
 #endif  // DEBUG
     shared_ptr<Order> result_buy_order = nullptr;
     if (usr->get_fluid() < price * num_share || freeze) {
 #ifdef DEBUG
         cout << "\tnot enough money or stock is freezed, Aborting" << endl;
-        cout << "\tusr fluid: " << usr->get_fluid() << " price: " << price << " num_share: " << num_share << " stock price: " << get_price() << endl;
 #endif  // DEBUG
         return make_pair(-1, result_buy_order);
     }
@@ -93,7 +97,8 @@ OrderResult Stock::buy(shared_ptr<Account> usr, int num_share, double price) {
     cout << endl;
 #endif  // DEBUG
 
-    int buy_log_id = logger->get_id();
+    auto logger_strong = logger.lock();
+    int buy_log_id = logger_strong->get_id();
     int num_bought = 0;
     shared_ptr<Order> cheapest_sell_order;
     for (auto i : sell_orders) {
@@ -114,10 +119,10 @@ OrderResult Stock::buy(shared_ptr<Account> usr, int num_share, double price) {
             del_sell_order(cheapest_sell_order);
             seller->del_order(cheapest_sell_order);
             auto txn = make_shared<DelOrderTransaction>(cheapest_sell_order, buy_log_id);
-            logger->push_back(static_pointer_cast<Transaction>(txn));
+            logger_strong->push_back(static_pointer_cast<Transaction>(txn));
         }
         auto txn = make_shared<BuyAndSellTransaction>(usr, seller, actual_bought, cheapest_sell_order, buy_log_id);
-        logger->push_back(static_pointer_cast<Transaction>(txn));
+        logger_strong->push_back(static_pointer_cast<Transaction>(txn));
         num_bought += actual_bought;
         usr->add_money(-cheapest_sell_order->get_price() * actual_bought);
         usr->add_share(stock_id, +actual_bought);
@@ -145,11 +150,11 @@ OrderResult Stock::buy(shared_ptr<Account> usr, int num_share, double price) {
 OrderResult Stock::sell(shared_ptr<Account> usr, int num_share, double price) {
 #ifdef DEBUG
     cout << "[stock.sell]: usr " << usr->get_id() << " want to sell stock " << stock_id << endl;
+    cout << "\tusr share: " << usr->get_share(stock_id) << " num_share: " << num_share << " freezed: " << freeze << endl;
 #endif  // DEBUG
     shared_ptr<Order> result_sell_order = nullptr;
     if (usr->get_share(stock_id) < num_share || freeze) {
         cout << "\tnot enough shares to sell or stock is freezed" << endl;
-        cout << "\tusr share: " << usr->get_share(stock_id) << " num_share: " << num_share << endl;
         return make_pair(-1, result_sell_order);
     }
 
@@ -162,7 +167,8 @@ OrderResult Stock::sell(shared_ptr<Account> usr, int num_share, double price) {
     cout << endl;
 #endif  // DEBUG
 
-    int sell_log_id = logger->get_id();
+    auto logger_strong = logger.lock();
+    int sell_log_id = logger_strong->get_id();
     int num_sold = 0;
     shared_ptr<Order> top_buy_order;
     for (auto i : buy_orders) {
@@ -181,10 +187,10 @@ OrderResult Stock::sell(shared_ptr<Account> usr, int num_share, double price) {
             del_buy_order(top_buy_order);
             buyer->del_order(top_buy_order);
             auto txn = make_shared<DelOrderTransaction>(top_buy_order, sell_log_id);
-            logger->push_back(static_pointer_cast<Transaction>(txn));
+            logger_strong->push_back(static_pointer_cast<Transaction>(txn));
         }
         auto txn = make_shared<BuyAndSellTransaction>(top_buy_order->get_usr(), usr, actual_sold, top_buy_order, sell_log_id);
-        logger->push_back(static_pointer_cast<Transaction>(txn));
+        logger_strong->push_back(static_pointer_cast<Transaction>(txn));
         num_sold += actual_sold;
         usr->add_money(+top_buy_order->get_price() * actual_sold);
         usr->add_share(stock_id, -actual_sold);
@@ -215,8 +221,9 @@ bool Stock::check_freeze() {
     if (st_price == 0) return 0;
     double cr_price = (sell_orders.empty()) ? 0 : sell_orders.begin()->first;
     if (cr_price > 1.1 * st_price || cr_price < 0.9 * st_price) {
-        auto txn = make_shared<FreezeTransaction>(shared_from_this(), logger->get_id());
-        logger->push_back(txn);
+        auto logger_strong = logger.lock();
+        auto txn = make_shared<FreezeTransaction>(shared_from_this(), logger_strong->get_id());
+        logger_strong->push_back(txn);
         freeze = 1;
         cout << "\tis now freezed" << endl;
     }
@@ -269,11 +276,13 @@ BuyAndSellTransaction::BuyAndSellTransaction(shared_ptr<Account> _buyer, shared_
 }
 void BuyAndSellTransaction::undo() {
     double price = order->get_price();
+    auto buyer_strong = buyer.lock();
+    auto seller_strong = buyer.lock();
     order->add(num_share);
-    buyer->add_money(num_share * price);
-    buyer->add_share(order->get_stock()->get_id(), -num_share);
-    seller->add_money(-num_share * price);
-    seller->add_share(order->get_stock()->get_id(), num_share);
+    buyer_strong->add_money(num_share * price);
+    buyer_strong->add_share(order->get_stock()->get_id(), -num_share);
+    seller_strong->add_money(-num_share * price);
+    seller_strong->add_share(order->get_stock()->get_id(), num_share);
 }
 
 AddOrderTransaction::AddOrderTransaction(shared_ptr<Order> _order, int _id) : Transaction(_id) {
@@ -304,7 +313,8 @@ FreezeTransaction::FreezeTransaction(shared_ptr<Stock> _stock, int _id) : Transa
     this->txn_type = Transaction::FREEZE;
 }
 void FreezeTransaction::undo() {
-    stock->reset_freeze();
+    auto stock_strong = stock.lock();
+    stock_strong->reset_freeze();
 }
 
 void Logs::push_back(shared_ptr<Transaction> log) { contents.push_back(log); }
