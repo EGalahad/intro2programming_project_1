@@ -1,5 +1,11 @@
 CXX_FLAGS = -fsanitize=address -Wall -g -std=c++11
 
+check: *.o checker.cpp
+	g++ -c checker.cpp $(CXX_FLAGS) -o checker.o
+	g++ $^ checker.o -o $@
+	./check
+	rm check checker.o
+
 main: *.o
 	@echo you can turn off the DEBUG definition in src/stock.cpp to disable messages
 	g++ $^ -o $@ $(CXX_FLAGS)

@@ -11,6 +11,8 @@
 using namespace std;
 
 #define DEBUG
+#define DEBUG_MEMORY
+// #define DEBUG_BUY
 
 class Stock;
 class Account;
@@ -23,7 +25,7 @@ class Logs;
 /**
  * @brief   some amount of a stock
  */
-typedef pair<shared_ptr<Stock>, int> StockShare;
+typedef pair<weak_ptr<Stock>, int> StockShare;
 
 /**
  * @brief   item(i.e. stock and num shares), usr, price, type
@@ -39,7 +41,7 @@ class Order {
    protected:
     double price;
     StockShare item;
-    shared_ptr<Account> usr;
+    weak_ptr<Account> usr;
 
    public:
     Order(StockShare _item, shared_ptr<Account> _usr, double _price, OrderType _type);
@@ -48,8 +50,8 @@ class Order {
     void del(int num_share);
     int get_shares();
     double get_price();
-    shared_ptr<Account> get_usr();
-    shared_ptr<Stock> get_stock();
+    weak_ptr<Account> get_usr();
+    weak_ptr<Stock> get_stock();
 #ifdef DEBUG
     void debug();
 #endif  // DEBUG
@@ -158,9 +160,9 @@ class Account {
     void add_share(int stock_id, int num);
     int get_share(int stock_id);
     int get_net_share(int stock_id);
-    #ifdef DEBUG
+#ifdef DEBUG
     friend class Market;
-    #endif // DEBUG
+#endif  // DEBUG
 };
 
 class Transaction {
@@ -176,7 +178,9 @@ class Transaction {
     Transaction() = delete;
     Transaction(int txn_id);
     virtual void undo() = 0;
+#ifdef DEBUG
     virtual void log() = 0;
+#endif  // DEBUG
 };
 
 class BuyAndSellTransaction : public Transaction {
@@ -186,6 +190,7 @@ class BuyAndSellTransaction : public Transaction {
     shared_ptr<Order> order;
     BuyAndSellTransaction(shared_ptr<Account> _buyer, shared_ptr<Account> _seller, int _num, shared_ptr<Order> order, int _id);
     void undo() override;
+#ifdef DEBUG
     void log() override {
         auto buyer_strong = buyer.lock();
         auto seller_strong = buyer.lock();
@@ -193,9 +198,13 @@ class BuyAndSellTransaction : public Transaction {
              << "buyer id:" << buyer_strong->get_id()
              << " seller id: " << seller_strong->get_id()
              << " num_share: " << num_share
-             << " stock_id: " << order->get_stock()->get_id()
+             << " stock_id: " << order->get_stock().lock()->get_id()
              << endl;
     }
+#endif  // DEBUG
+#ifdef DEBUG_BUY
+    friend class Market;
+#endif  // DEBUG_BUY
 };
 
 class AddOrderTransaction : public Transaction {
@@ -203,11 +212,13 @@ class AddOrderTransaction : public Transaction {
     shared_ptr<Order> order;
     AddOrderTransaction(shared_ptr<Order> _order, int _id);
     void undo() override;
+#ifdef DEBUG
     void log() override {
         cout << "[logging] type: add order" << endl
-             << " stock_id: " << order->get_stock()->get_id()
+             << " stock_id: " << order->get_stock().lock()->get_id()
              << endl;
     }
+#endif  // DEBUG
 };
 
 class DelOrderTransaction : public Transaction {
@@ -215,11 +226,13 @@ class DelOrderTransaction : public Transaction {
     shared_ptr<Order> order;
     DelOrderTransaction(shared_ptr<Order> _order, int _id);
     void undo() override;
+#ifdef DEBUG
     void log() override {
         cout << "[logging] type: del order" << endl
-             << " stock_id: " << order->get_stock()->get_id()
+             << " stock_id: " << order->get_stock().lock()->get_id()
              << endl;
     }
+#endif  // DEBUG
 };
 
 class FreezeTransaction : public Transaction {
@@ -227,12 +240,14 @@ class FreezeTransaction : public Transaction {
     weak_ptr<Stock> stock;
     FreezeTransaction(shared_ptr<Stock> _stock, int _id);
     void undo() override;
+#ifdef DEBUG
     void log() override {
         auto stock_strong = stock.lock();
         cout << "[logging] type: freeze" << endl
              << " stock_id: " << stock_strong->get_id()
              << endl;
     }
+#endif  // DEBUG
 };
 
 class Logs {
@@ -269,7 +284,7 @@ class Market  // Please DO NOT change the interface here
 
     /**
      * @brief Destruct all the objects its shared_ptr points to
-     * 
+     *
      */
     ~Market();
 
@@ -359,10 +374,9 @@ class Market  // Please DO NOT change the interface here
      */
     void undo();
 
+    bool check();
 #ifdef DEBUG
     void log();
-
-    bool check();
 
    private:
     bool check_buy_order_smaller_than_sell_order();
@@ -372,6 +386,11 @@ class Market  // Please DO NOT change the interface here
     bool check_usr_money_not_negative();
 
     bool check_usr_does_not_sell_more_than_he_have();
+
+    bool check_buyer_is_not_seller();
 #endif  // DEBUG
+#ifdef DEBUG_MEMORY
+    bool check_account_unique();
+#endif  // DEBUG_MEMORY
 };
 #endif

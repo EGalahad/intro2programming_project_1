@@ -58,6 +58,18 @@ void test() {
     */
 }
 
+void init_market_ptr(Market* market, vector<int> &stock_list, vector<int> &user_list, int n_usr = 50, int n_stk = 60) {
+    user_list.push_back(0);
+    for (int i = 1; i <= n_usr; i++) {
+        user_list.push_back(i);
+        market->add_usr(i, i * n_stk * 40);
+    }
+    for (int i = 1; i <= n_stk; i++) {
+        stock_list.push_back(i);
+        market->add_stock(i, i * n_usr, i);
+    }
+}
+
 void init_market(shared_ptr<Market> market, vector<int> &stock_list, vector<int> &user_list, int n_usr = 50, int n_stk = 60) {
     user_list.push_back(0);
     for (int i = 1; i <= n_usr; i++) {
@@ -75,7 +87,6 @@ void test_flunc() {
     vector<int> stock_list, user_list;
     init_market(market, stock_list, user_list);
     market->new_day();
-    market->log();
     for (int i : user_list) {
         if (i == 0) continue;
         market->usr_buy(i, 30, 2, 10 * i);
@@ -177,10 +188,11 @@ void test_illegal() {
 
 void test_undo() {
     auto market = make_shared<Market>();
+    // Market* market = new Market();
     vector<int> stock_list, user_list;
-    int n_usr = 4000, n_stk = 6000;
+    int n_usr = 40, n_stk = 60;
     init_market(market, stock_list, user_list, n_usr, n_stk);
-    market->new_day();
+    market->new_day(); // this day usr i buy stock i, then undo randomly w.p 0.9
     int cnt = 0;
     for (int i = 1; i < user_list.size(); i++) {
         if (market->usr_buy(i, i, 0.9 * n_usr * i, i) != -1) cnt++;
@@ -190,7 +202,7 @@ void test_undo() {
         if (rand() < 0.9 * RAND_MAX) market->undo();
         market->check();
     }
-    market->new_day();
+    market->new_day(); // this day usr i random choose a stock and buy 0.7 of its share, at original price
     vector<int> hold_list(1, 0);
     for (int i = 1; i < user_list.size(); i++) {
         int stock_id = (long long)(n_stk - 1) * rand() / RAND_MAX + 1;
@@ -198,7 +210,7 @@ void test_undo() {
         market->usr_buy(i, stock_id, 0.7 * n_usr * i, stock_id);
         market->check();
     }
-    market->new_day();
+    market->new_day(); // this day usr i sell a portion of the stock he choose yesterday
     for (int i = 1; i < user_list.size(); i++) {
         market->usr_sell(i, hold_list[i], 4 * i, (double)hold_list[i] * 1.05);
         market->check();
@@ -213,6 +225,21 @@ void test_undo() {
         market->check();
     }
     market->new_day();
+    int best_stock_id = market->best_stock().first;
+    double best_price = market->best_stock().second;
+    for (int i = 1; i < user_list.size(); i++) {
+        double factor = 1 + (double)rand() / RAND_MAX * 0.2 - 0.08;
+        market->usr_buy(i, best_stock_id, i, best_price * factor);
+    }
+
+    int worst_stock_id = market->worst_stock().first;
+    double worst_price = market->worst_stock().second;
+    for (int i = 1; i < user_list.size(); i++) {
+        double factor = 1 + (double)rand() / RAND_MAX * 0.2 - 0.12;
+        market->usr_sell(i, worst_stock_id, i, worst_price * factor);
+    }
+    market->new_day();
+    // delete market;
 }
 
 int main() {
