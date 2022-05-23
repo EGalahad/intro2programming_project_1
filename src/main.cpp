@@ -190,7 +190,7 @@ void test_undo() {
     auto market = make_shared<Market>();
     // Market* market = new Market();
     vector<int> stock_list, user_list;
-    int n_usr = 40, n_stk = 60;
+    int n_usr = 4000, n_stk = 6000;
     init_market(market, stock_list, user_list, n_usr, n_stk);
     market->new_day(); // this day usr i buy stock i, then undo randomly w.p 0.9
     int cnt = 0;

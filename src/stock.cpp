@@ -41,6 +41,13 @@ double Stock::get_price() {
         return sell_orders.begin()->first;
     }
 }
+double Stock::get_highet_buy_order_price() {
+    if (buy_orders.empty()) {
+        return 0;
+    } else {
+        return -buy_orders.begin()->first;
+    }
+}
 
 typedef set<pair<double, shared_ptr<Order>>>::iterator iter;
 
@@ -266,7 +273,9 @@ bool Stock::check_freeze(int log_id) {
         auto logger_strong = logger.lock();
         auto txn = make_shared<FreezeTransaction>(shared_from_this(), log_id);
         logger_strong->push_back(static_pointer_cast<Transaction>(txn));
+#ifdef DEBUG
         cout << "\tis now freezed" << endl;
+#endif  // DEBUG
     }
     return freeze;
 }
@@ -321,7 +330,7 @@ Transaction::Transaction(int txn_id) { this->txn_id = txn_id; }
 
 BuyAndSellTransaction::BuyAndSellTransaction(shared_ptr<Account> _buyer, shared_ptr<Account> _seller, int _num, shared_ptr<Order> _order, int _id) : Transaction(_id) {
 #ifdef DEBUG_BUY
-    assert(_buyer != _seller);
+    // assert(_buyer != _seller);
 #endif  // DEBUG_BUY
 #ifdef DEBUG_MEMORY
     if (_buyer.use_count() != 3) {
@@ -341,7 +350,7 @@ void BuyAndSellTransaction::undo() {
     auto buyer_strong = buyer.lock();
     auto seller_strong = seller.lock();
 #ifdef DEBUG_BUY
-    if (order->get_stock()->get_id() == 24) {
+    if (order->get_stock().lock()->get_id() == 24) {
         cout << "\tundo transaction on stock 24" << endl;
     }
 #endif  // DEBUG_BUY
@@ -352,11 +361,11 @@ void BuyAndSellTransaction::undo() {
     seller_strong->add_share(order->get_stock().lock()->get_id(), +num_share);
 #ifdef DEBUG_BUY
     cout << "\tnow buyer " << buyer_strong->get_id()
-         << " has stock " << order->get_stock()->get_id() << " "
-         << buyer_strong->get_share(order->get_stock()->get_id()) << endl;
+         << " has stock " << order->get_stock().lock()->get_id() << " "
+         << buyer_strong->get_share(order->get_stock().lock()->get_id()) << endl;
     cout << "\tnow seller " << seller_strong->get_id()
-         << " has stock " << order->get_stock()->get_id() << " "
-         << seller_strong->get_share(order->get_stock()->get_id()) << endl;
+         << " has stock " << order->get_stock().lock()->get_id() << " "
+         << seller_strong->get_share(order->get_stock().lock()->get_id()) << endl;
 #endif  // DEBUG_BUY
 }
 
@@ -376,13 +385,13 @@ void AddOrderTransaction::undo() {
 }
 
 DelOrderTransaction::DelOrderTransaction(shared_ptr<Order> _order, int _id) : Transaction(_id) {
-#ifdef DEBUG
-    cout << "\tundo del order" << endl;
-#endif  // DEBUG
     this->order = _order;
     this->txn_type = Transaction::DEL_ORDER;
 }
 void DelOrderTransaction::undo() {
+#ifdef DEBUG
+    cout << "\tundo del order" << endl;
+#endif  // DEBUG
     auto usr = order->get_usr().lock();
     auto stock = order->get_stock().lock();
     if (order->order_type == Order::BUY) stock->add_buy_order(order, -2);
@@ -433,17 +442,17 @@ Market::~Market() {
         if (account.second.use_count() == 2)
             cerr << "account #" << account.second->get_id() << " unique" << endl;
         else
-            cerr << "duplicate account #" << account.second->get_id() 
-            << ", use count = " << account.second.use_count()
-            << ", expected 2" << endl;
+            cerr << "duplicate account #" << account.second->get_id()
+                 << ", use count = " << account.second.use_count()
+                 << ", expected 2" << endl;
     }
     for (auto stock : stocks) {
         if (stock.second.use_count() == 2)
             cerr << "stock #" << stock.second->get_id() << " unique" << endl;
         else
             cerr << "duplicate stock #" << stock.second->get_id()
-            << ", use count = " << stock.second.use_count()
-            << ", expected 2" << endl;
+                 << ", use count = " << stock.second.use_count()
+                 << ", expected 2" << endl;
     }
 
 #endif  // DEBUG_MEMORY
@@ -483,14 +492,16 @@ void Market::add_stock(int stock_id, int num_share, double price) {
 
 bool Market::add_order(int usr_id, int stock_id, int num_share, double price, bool order_type) {
     auto usr = accounts[usr_id];
-    if (order_type == 0) {
+    if (order_type == 0) { // buy order must be less than the lowest price of the stock
         if (usr->get_fluid() < num_share * price) return false;
+        if (price >= stocks[stock_id]->get_price()) return false;
         auto buy_order = make_shared<Order>(make_pair(stocks[stock_id], num_share), accounts[usr_id], price, Order::BUY);
         stocks[stock_id]->add_buy_order(buy_order);
         accounts[usr_id]->add_order(buy_order);
         return true;
-    } else {
+    } else { // sell order must be greater than the highest price of stock
         if (usr->get_net_share(stock_id) < num_share) return false;
+        if (price <= stocks[stock_id]->get_highet_buy_order_price()) return false;
         auto sell_order = make_shared<Order>(make_pair(stocks[stock_id], num_share), accounts[usr_id], price, Order::SELL);
         stocks[stock_id]->add_sell_order(sell_order);
         accounts[usr_id]->add_order(sell_order);
@@ -525,15 +536,18 @@ pair<int, double> Market::worst_stock() {
     int worst_id = stocks.begin()->second->get_id();
     for (auto stock : stocks) {
         auto s = stock.second;
-        if (s->get_price() < worst_price) worst_price = s->get_price(), worst_id = s->get_id();
+        double price = s->get_price();
+        if (price != 0 && price < worst_price) worst_price = price, worst_id = s->get_id();
     }
     return make_pair(worst_id, worst_price);
 }
 
 void Market::undo() {
     if (logger->size() == 0) {
+#ifdef DEBUG
         cout << "cannot undo anymore!" << endl;
-        // exit(0);
+#endif  // DEBUG
+        return;
     }
 #ifdef DEBUG
     cout << "[Market.undo()]" << endl;
@@ -547,122 +561,3 @@ void Market::undo() {
         txn->undo();
     }
 }
-
-bool Market::check() {
-    bool res = 0;
-#ifdef DEBUG
-    res |= check_buy_order_smaller_than_sell_order();
-    res |= check_ciruit_breaker();
-    res |= check_usr_money_not_negative();
-    res |= check_usr_does_not_sell_more_than_he_have();
-    res |= check_buyer_is_not_seller();
-#endif  // DEBUG
-#ifdef DEBUG_MEMORY
-    res |= check_account_unique();
-#endif  // DEBUG_MEMORY
-    if (res) {
-        cout << "ERROR: running check failed" << endl;
-        exit(0);
-    }
-    return res;
-}
-
-#ifdef DEBUG_MEMORY
-bool Market::check_account_unique() {
-    for (auto account : accounts) {
-        if (account.second.use_count() != 2) {
-            cout << "\taccount " << account.second->get_id() << " use count = " << account.second.use_count() << ", expected 2" << endl;
-            return 1;
-        }
-    }
-    return 0;
-}
-#endif  // DEBUG_MEMORY
-
-#ifdef DEBUG
-void Market::log() {
-    for (auto log : logger->contents) {
-        log->log();
-    }
-}
-
-bool Market::check_buy_order_smaller_than_sell_order() {
-    for (auto stock : stocks) {
-        if (stock.second->buy_orders.empty()) continue;
-        if (stock.second->sell_orders.empty()) continue;
-        auto max_buy = stock.second->buy_orders.begin();
-        auto min_sell = stock.second->sell_orders.begin();
-        if (-max_buy->first >= min_sell->first) {
-            cout << "[check_buy_order_smaller_than_sell_order]: stock_id: " << stock.second->get_id() << endl;
-            cout << "the max buy order: " << endl;
-            cout << "\t";
-            max_buy->second->debug();
-            cout << "the min sell order: " << endl;
-            cout << "\t";
-            min_sell->second->debug();
-            return 1;
-        }
-    }
-    return 0;
-}
-
-bool Market::check_ciruit_breaker() {
-    for (auto stock : stocks) {
-        if (!stock.second->is_freeze() && stock.second->check_freeze(-1)) {
-            cout << "[market.check_ciruit_breaker]: " << endl;
-            cout << "\tERROR" << endl;
-            cout << "\tstock_id" << stock.second->get_id()
-                 << "st_price: " << stock.second->st_price
-                 << " cr_price: " << stock.second->get_price() << endl;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-bool Market::check_usr_money_not_negative() {
-    for (auto account : accounts) {
-        if (account.second->get_remain() < 0) {
-            cout << "[market.check_usr_money_not_negative]: usr_id: " << account.first << endl;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-bool Market::check_usr_does_not_sell_more_than_he_have() {
-    for (auto account : accounts) {
-        unordered_map<int, int> selling;
-        for (auto order : account.second->orders) {
-            if (order->order_type == Order::SELL)
-                selling[order->get_stock().lock()->get_id()] += order->get_shares();
-        }
-        for (auto hold : selling) {
-            auto iter = account.second->holds.find(hold.first);
-            if (iter == account.second->holds.end()) {
-                cout << "[market.check]: selling never owned stock, usr id: " << account.second->get_id() << endl;
-                return 1;
-            }
-            if (iter->second < hold.second) {
-                cout << "[market.check]: selling more than owned, usr id: " << account.second->get_id() << endl;
-                cout << "\towned: " << hold.second << " sold: " << iter->second << endl;
-                return 1;
-            }
-        }
-    }
-    return 0;
-}
-
-bool Market::check_buyer_is_not_seller() {
-    for (auto txn : logger->contents) {
-        if (txn->txn_type != Transaction::BUY_AND_SELL) continue;
-        auto bas_txn = dynamic_pointer_cast<BuyAndSellTransaction>(txn);
-        if (bas_txn->seller.lock() == bas_txn->buyer.lock()) {
-            cout << "[market.check_buyer_is_not_seller]: bas txn has identical buyer and seller" << endl;
-            return 1;
-        }
-    }
-    return 0;
-}
-
-#endif  // DEBUG

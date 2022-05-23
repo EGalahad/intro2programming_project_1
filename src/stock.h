@@ -10,8 +10,8 @@
 #include <vector>
 using namespace std;
 
-#define DEBUG
-#define DEBUG_MEMORY
+// #define DEBUG
+// #define DEBUG_MEMORY
 // #define DEBUG_BUY
 
 class Stock;
@@ -130,6 +130,7 @@ class Stock : public enable_shared_from_this<Stock> {
     void add_orders(OrderList orders);
     int get_id();
     double get_price();
+    double get_highet_buy_order_price();
     void init_start_price();
     bool is_freeze();
 

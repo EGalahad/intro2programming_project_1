@@ -1,17 +1,16 @@
-CXX_FLAGS = -fsanitize=address -Wall -g -std=c++11
-
-check: *.o checker.cpp
-	g++ -c checker.cpp $(CXX_FLAGS) -o checker.o
-	g++ $^ checker.o -o $@
-	./check
-	rm check checker.o
+CXX_FLAGS := -fsanitize=address -Wall -g -std=c++11
+DEBUG_FLAGS := -DDEBUG -DDEBUG_BUY -DDEBUG_MEMORY
 
 main: *.o
-	@echo you can turn off the DEBUG definition in src/stock.cpp to disable messages
-	g++ $^ -o $@ $(CXX_FLAGS)
+	@echo ========== you can uncomment the DEBUG definitions in src/stock.h to enable messages
+	@echo ========== or you can enable it here in Makefile
+	g++ $^ -o $@ $(CXX_FLAGS) $(DEBUG_FLAGS)
+
+# stock.o: stock.cpp stock.h
+# 	g++ -c $< $(CXX_FLAGS) $(DEBUG_FLAGS)
 
 %.o: %.cpp
-	g++ -c $^ $(CXX_FLAGS)
+	g++ -c $^ $(CXX_FLAGS) $(DEBUG_FLAGS)
 
 clean:
 	rm -rf *.o main
