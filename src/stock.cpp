@@ -485,7 +485,6 @@ void Market::add_stock(int stock_id, int num_share, double price) {
     stocks[stock_id] = make_shared<Stock>(stock_id, logger);
     auto initial_sell_order = make_shared<Order>(make_pair(stocks[stock_id], num_share), market_account, price, Order::SELL);
     market_account->add_order(initial_sell_order);
-    market_account->add_money(num_share * price);
     market_account->add_share(stock_id, num_share);
     stocks[stock_id]->add_sell_order(initial_sell_order);
 }
